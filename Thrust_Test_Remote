@@ -1,0 +1,330 @@
+
+// Variables will change:
+
+const int baudRate = 115200; //constant integer to set the baud rate for serial monitor
+int ledState = LOW;             // ledState used to set the LED
+
+//===========================================================================
+//============================= Timmer Settings =============================
+//===========================================================================
+// Generally, you should use "unsigned long" for variables that hold time
+// The value will quickly become too large for an int to store
+unsigned long previousMillis = 0;        // will store last time LED was updated
+unsigned long previousMillis2 = 0; 
+unsigned long previousMillis3 = 0;
+unsigned long previousMillis_Sw = 0;  
+const long interval = 1000;           // interval at which to blink (milliseconds)
+const long interval_T = 220;           // interval at which to blink (milliseconds)
+const long interval_P = 10;           // interval at which to blink (milliseconds)
+const long interval_Sw_Sec = 3;           // LED & 릴레이 켜지는 시간 (Sec)    
+int interval_Sw = interval_Sw_Sec*1000; // interval_Sw에 milliSec 단위로 저장
+
+//===========================================================================
+//============================= Thermocouple Setting ========================
+//===========================================================================
+//#include "max6675.h"
+//#include "SPI.h"
+////SPI.begin(52);
+//int thermoDO1 = 74;
+//int thermoCS1 = 52;      //nCS, CS, CSB, CSN, nSS, STE: 칩 셀렉트, 슬레이브 전송 기능 이용 (active low, 마스터로부터의 출력)
+//int thermoCLK1 = 76;    //
+//MAX6675 thermocouple1(thermoCLK1, thermoCS1, thermoDO1);
+//int thermoDO2 = 74;
+//int thermoCS2 = 10;      //nCS, CS, CSB, CSN, nSS, STE: 칩 셀렉트, 슬레이브 전송 기능 이용 (active low, 마스터로부터의 출력)
+//int thermoCLK2 = 76;    //
+//MAX6675 thermocouple2(thermoCLK2, thermoCS2, thermoDO2);
+//double Temp_C1, Temp_C2;
+
+//===========================================================================
+//============================= LED Settings ================================
+//===========================================================================
+#include <Adafruit_NeoPixel.h>
+#ifdef __AVR__
+ #include <avr/power.h> // Required for 16 MHz Adafruit Trinket
+#endif
+// Which pin on the Arduino is connected to the NeoPixels?
+int pin         =  6; // On Trinket or Gemma, suggest changing this to 1
+
+// How many NeoPixels are attached to the Arduino?
+int numPixels   = 4; // Popular NeoPixel ring size
+
+// NeoPixel color format & data rate. See the strandtest example for
+// information on possible values.
+int pixelFormat = NEO_GRB + NEO_KHZ800;
+
+// Rather than declaring the whole NeoPixel object here, we just create
+// a pointer for one, which we'll then allocate later...
+Adafruit_NeoPixel *pixels;
+
+#define DELAYVAL 2000 // Time (in milliseconds) to pause between pixels
+
+//===========================================================================
+//============================= Relays Settings ===========================
+//===========================================================================
+
+int relay_pin = 8;
+ 
+
+//===========================================================================
+//============================= LoadCell Settings ===========================
+//===========================================================================
+#include "HX711.h"
+#define DOUT  4  //MISO - SDO; DO, DOUT, SO: 직렬 데이터 출력, 데이터 출력, 직렬 출력
+#define CLK  5   //SCLK - SCK; CLK: 직렬 클럭 (마스터로부터의 출력)
+HX711 scale;
+  int i = 0;
+float calibration_factor = -329; //-7050 worked for my 440lb max scale setup
+float Weight;
+float Weight2;
+
+
+//===========================================================================
+//============================= Pressure Settings ===========================
+//===========================================================================
+//float EMA_a = 0.2;      // initialization of EMA alpha
+//int EMA_S = 0;          // initialization of EMA S
+//
+//const int pressureInput = A4; //select the analog input pin for the pressure transducer
+//const int pressureZero = 102.4; //analog reading of pressure transducer at 0psi
+//const int pressureMax = 921.6; //analog reading of pressure transducer at 100psi
+//const int pressuretransducermaxPSI = 1000; //psi value of transducer being used
+//
+//float pressureValue = 0;
+//float pressureValue_EMA_S = 0;
+//int sensorValue = 0;
+
+//===========================================================================
+//============================= Remote Control Settings =====================
+//===========================================================================
+int ReCtl_pin = 12; 
+bool fReCtrl = 0;
+
+
+//-------------------------------------------------------
+
+void setup() {
+  
+  #if defined(__AVR_ATtiny85__) && (F_CPU == 16000000)
+  clock_prescale_set(clock_div_1);
+#endif
+  Serial.begin(baudRate);
+  //Serial.println("HX711 calibration sketch");
+  //Serial.println("Remove all weight from scale");
+  //Serial.println("After readings begin, place known weight on scale");
+  //Serial.println("Press + or a to increase calibration factor");
+  //Serial.println("Press - or z to decrease calibration factor");
+  scale.begin(DOUT, CLK);
+  scale.set_scale();
+  scale.tare();  //Reset the scale to 0
+
+  long zero_factor = scale.read_average(); //Get a baseline reading
+ // Serial.print("Zero factor: "); //This can be used to remove the need to tare the scale. Useful in permanent scale projects.
+ // Serial.println(zero_factor);
+   pixels = new Adafruit_NeoPixel(numPixels, pin, pixelFormat);
+
+  // Going forward from here, code works almost identically to any other
+  // NeoPixel example, but instead of the dot operator on function calls
+  // (e.g. pixels.begin()), we instead use pointer indirection (->) like so:
+  pixels->begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  // You'll see more of this in the loop() function below.
+
+  pinMode(relay_pin,OUTPUT);  //Relay 작동핀
+//  pressureValue_EMA_S = analogRead(pressureInput);
+  pinMode(ReCtl_pin,INPUT_PULLUP);
+
+}
+//-------------------------------------------------------
+void loop() 
+{
+  //Adjust to this calibration factor
+  scale.set_scale(calibration_factor);
+ Weight=scale.get_units();
+ Weight2=scale.get_units();
+
+int ReCtl = digitalRead(ReCtl_pin);
+
+  Serial.print(Weight2);
+  Serial.print(", "); 
+  Serial.print(ReCtl);
+  Serial.print(", ");
+  Serial.print(fReCtrl);
+  Serial.print(", ");
+  Serial.println(interval_Sw);
+
+  
+//  Serial.print(Temp_C1);
+//  Serial.print(", ");
+//
+//  Serial.print(Temp_C2);
+//  Serial.print(", ");
+//
+//
+//  Serial.print(pressureValue, 1);
+//  Serial.print(", ");
+//  
+//  Serial.print(sensorValue);
+//  Serial.print(", ");
+//  
+//  Serial.println(pressureValue_EMA_S);
+
+    
+ 
+
+ 
+  //Change this to kg and re-adjust the calibration factor if you follow SI units like a sane person
+  //기존 예제가 파운드(lbs) 기준이지만 우리는 킬로그램(kg)을 쓸것이므로 'kg'로 바꿉시다.
+  //Serial.print(" g"); 
+  //Serial.print(" calibration_factor: ");
+  //Serial.print(calibration_factor);
+ 
+  if(Serial.available())
+  {
+    char temp = Serial.read();
+ 
+    //변경 : 보정값 범위 설정 가능하도록 변경
+    switch(temp)
+    {
+      case '1':
+        calibration_factor += 10;
+        break;
+      case '2':
+        calibration_factor += 50;
+        break;
+      case '3':
+        calibration_factor += 100;
+        break;
+      case '4':
+        calibration_factor += 1000;
+             case '5':
+        calibration_factor += 1;
+        break;
+ 
+      case 'a':
+        calibration_factor -= 10;
+        break;
+      case 's':
+        calibration_factor -= 50;
+        break;
+      case 'd':
+        calibration_factor -= 100;
+        break;
+      case 'f':
+        calibration_factor -= 1000;
+              case 'g':
+        calibration_factor -= 1;
+        break;
+    }
+  }
+
+  unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
+
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW) {
+      ledState = HIGH;
+    pixels->setPixelColor(0, pixels->Color(150, 0, 0));
+    pixels->setPixelColor(1, pixels->Color(150, 0, 0));
+    pixels->setPixelColor(2, pixels->Color(30, 30, 30));
+    pixels->setPixelColor(3, pixels->Color(30, 30, 30));
+    pixels->show();   // Send the updated pixel colors to the hardware.
+    } else {
+      ledState = LOW;
+    pixels->setPixelColor(0, pixels->Color(0, 0, 0));
+    pixels->setPixelColor(1, pixels->Color(0, 0, 0));
+    pixels->setPixelColor(2, pixels->Color(30, 30, 30));
+    pixels->setPixelColor(3, pixels->Color(30, 30, 30));
+    pixels->show();
+    }
+
+  }
+
+//    if (currentMillis - previousMillis2 >= interval_T) {
+//    previousMillis2 = currentMillis;
+//    Temp_C1 = thermocouple1.readCelsius();
+//    Temp_C2 = thermocouple2.readCelsius();
+//
+//  }
+
+
+//    
+// {
+//    previousMillis3 = currentMillis;
+//  sensorValue = analogRead(pressureInput);
+//  pressureValue = analogRead(pressureInput); //reads value from input pin and assigns to variable
+//  pressureValue = ((pressureValue-pressureZero)*pressuretransducermaxPSI)/(pressureMax-pressureZero); //conversion equation to convert analog reading to psi
+//  pressureValue_EMA_S = (EMA_a*pressureValue ) + ((1-EMA_a)*pressureValue_EMA_S);  
+//    
+//  }
+
+if (ReCtl==0)  {
+  fReCtrl=1;
+  previousMillis_Sw = currentMillis;
+}
+
+if (fReCtrl==1){
+    digitalWrite(relay_pin,LOW);
+    pixels->setPixelColor(0, pixels->Color(0,150,  0));
+    pixels->setPixelColor(1, pixels->Color(0,150,  0));
+    pixels->setPixelColor(2, pixels->Color(0,150,  0));
+    pixels->setPixelColor(3, pixels->Color(0,150,  0));
+    pixels->show(); 
+}
+else digitalWrite(relay_pin,HIGH);
+
+    if ((currentMillis - previousMillis_Sw >= interval_Sw)&&(fReCtrl==1)) {
+    fReCtrl=0;
+  }
+
+
+//  if ((currentMillis >=14000)&&(currentMillis <=24000)){            // 14초에서 켜지고, 24초에서 꺼지고,
+//    digitalWrite(relay_pin,LOW);
+//    pixels->setPixelColor(0, pixels->Color(0,150,  0));
+//    pixels->setPixelColor(1, pixels->Color(0,150,  0));
+//    pixels->setPixelColor(2, pixels->Color(0,150,  0));
+//    pixels->setPixelColor(3, pixels->Color(0,150,  0));
+//    pixels->show();
+//  }
+//  else digitalWrite(relay_pin,HIGH);
+
+
+//char text[40];
+//sprintf(text, "%f, %d, %d\n",Weight2,Temp_C,sensorValue);
+
+//static long secound_count = 0;
+//  if( secound_flag ) {
+//        secound_flag = f_disabled;
+//
+//        if (secound_flag%1 == 0) {
+//          // 30분마다 할 일
+//    pixels->setPixelColor(0, pixels->Color(0, 0, 0));
+//    pixels->setPixelColor(1, pixels->Color(0, 0, 0));
+//    pixels->show();   // Send the updated pixel colors to the hardware.
+//        }
+//        if (secound_flag%2 == 0) {
+//    pixels->setPixelColor(0, pixels->Color(150, 0, 0));
+//    pixels->setPixelColor(1, pixels->Color(150, 0, 0));
+//    pixels->show();   // Send the updated pixel colors to the hardware.
+//
+//        }
+//
+//        secound_count++;
+//        secound_count%=2; 
+//  }
+
+
+// i++;
+// if(i>=200)i=0;
+//    
+//else if(i>=100) {
+//    pixels->setPixelColor(0, pixels->Color(0, 0, 0));
+//    pixels->setPixelColor(1, pixels->Color(0, 0, 0));
+//    pixels->show(); }  // Send the updated pixel colors to the hardware.
+//else {
+//    pixels->setPixelColor(0, pixels->Color(150, 0, 0));
+//    pixels->setPixelColor(1, pixels->Color(150, 0, 0));
+//    pixels->show(); }  // Send the updated pixel colors to the hardware.
+
+}
+
